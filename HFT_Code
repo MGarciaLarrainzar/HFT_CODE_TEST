@@ -1,0 +1,66 @@
+strategy("High-Frequency Trading Simulation", overlay=true)
+
+// Define trading range
+start_date = timestamp(2020, 1, 1, 0, 0, 0)
+end_date = timestamp(2023, 5, 14, 23, 59, 59)
+in_range = time >= start_date and time <= end_date
+
+// Trading strategy parameters
+instrument = "EURUSD"
+trade_units = 1000
+timeframe = "1"
+ma_fast = 5
+ma_slow = 100
+threshold = 0.0001
+
+// Function to calculate moving averages
+calculate_moving_averages(src, ma_fast, ma_slow) =>
+    ma_fast_values = ta.sma(src, ma_fast)
+    ma_slow_values = ta.sma(src, ma_slow)
+    [ma_fast_values, ma_slow_values]
+
+// Function to obtain the best price available at all times
+get_best_price() =>
+    providers = "Provider1,Provider2,Provider3"  // Lista de proveedores de liquidez
+    var float best_price = na
+    for provider in str.split(providers, ",")
+        // Obtener el precio del proveedor de liquidez
+        price = ta.highest(close, 1)
+
+        // Compare with the best price so far
+        if na(best_price) or price > best_price
+            best_price := price
+    best_price
+
+// Variables to store moving averages
+var float ma_fast_values = na
+var float ma_slow_values = na
+
+// Trading strategy
+if barstate.isfirst
+    [ma_fast_values, ma_slow_values] = calculate_moving_averages(close, ma_fast, ma_slow)
+
+buy_signal = ta.crossover(ma_fast_values, ma_slow_values) and (ma_fast_values > ma_slow_values) and (ma_fast_values - ma_slow_values > threshold)
+sell_signal = ta.crossunder(ma_fast_values, ma_slow_values) and (ma_fast_values < ma_slow_values) and (ma_slow_values - ma_fast_values > threshold)
+
+if buy_signal
+    price = get_best_price()
+    strategy.entry("Buy", strategy.long, qty=trade_units)
+    strategy.exit("Sell", "Buy", qty=trade_units, limit=price)
+
+if sell_signal
+    price = get_best_price()
+    strategy.entry("Sell", strategy.short, qty=trade_units)
+    strategy.exit("Cover", "Sell", qty=trade_units, limit=price)
+
+// Additional strategy using 5-period and 10-period SMA
+longCondition = ta.crossover(ta.sma(close, 5), ta.sma(close, 10))
+if longCondition
+    strategy.entry('Long', strategy.long)
+
+plotshape(longCondition, color=color.new(color.blue, 0))
+
+shortCondition = ta.crossunder(ta.sma(close, 5), ta.sma(close, 10))
+if shortCondition
+    strategy.entry('Short', strategy.short)
+plotshape(shortCondition, color=color.new(color.red, 0))
